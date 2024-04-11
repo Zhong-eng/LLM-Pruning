@@ -1,0 +1,7 @@
+#!/bin/bash
+# use the bash shell
+set -x 
+module load anaconda3
+
+conda activate llm
+python baseline.py
