@@ -11,6 +11,7 @@ from torchsummary import summary
 from tqdm import tqdm
 from datasets import load_dataset
 
+
 class textDataset(Dataset):
   def __init__(self, texts, label, tokenizer, max_length):
         self.texts = texts
