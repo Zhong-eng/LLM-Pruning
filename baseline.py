@@ -82,18 +82,19 @@ if __name__ == "__main__":
 
     loss_fn = nn.BCEWithLogitsLoss()
 
+    best_acc = 0.0
     #Initialize Optimizer
     optimizer= optim.Adam(model.parameters(), lr= 0.000001)
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=10, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/bert-base'),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/baseline'),
         record_shapes=True,
         profile_memory=True,
         with_stack=True
     ) as prof:
-        for i in range(2):
+        for i in range(15):
             model.train()
-            for batch, dl in tqdm(enumerate(train_loader)):
+            for batch, dl in enumerate(train_loader):
                 if batch < 1 + 1 + 10:
                     prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
                 ids=dl['ids']
@@ -135,4 +136,11 @@ if __name__ == "__main__":
                     pred = torch.where(output >= 0, 1, 0)
                     num_correct += sum(1 for a, b in zip(pred, label) if a[0] == b[0])
                     num_samples += pred.shape[0]
+                acc = num_correct / num_samples
                 print(f'##Epoch {i+1}: Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f}')
+
+                if acc > best_acc:
+                    best_acc = acc
+                    torch.save(model.state_dict(), './checkpoint/baseline.pt')
+                    print("Best checkpoint saved!")
+
