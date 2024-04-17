@@ -3,7 +3,7 @@
 
 #SBATCH --time=5:00:00
 #SBATCH --mem=16GB
-#SBATCH --output=/jet/home/xli20/LLM-Pruning/baseline.log
+#SBATCH --output=/jet/home/xli20/LLM-Pruning/L1.log
 #SBATCH --mail-user=xinrul@andrew.cmu.edu
 #SBATCH --mail-type=BEGIN,END,FAIL
 
@@ -12,4 +12,4 @@ set -x
 module load anaconda3
 
 conda activate llm
-python baseline.py
+python L1_prune.py

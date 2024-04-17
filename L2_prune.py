@@ -59,9 +59,9 @@ class BERT(nn.Module):
 
         return out
     
-class BERTPruned(nn.Module):
+class BERTL2Pruned(nn.Module):
     def __init__(self, prune_heads):
-        super(BERTPruned, self).__init__()
+        super(BERTL2Pruned, self).__init__()
         self.bert_model = transformers.BertModel.from_pretrained("bert-base-uncased")
         self.out = nn.Linear(768, 1)
         self.prune_heads = prune_heads
@@ -81,12 +81,11 @@ class BERTPruned(nn.Module):
         attention = layer.attention.self
         all_weights = [attention.query.weight, attention.key.weight, attention.value.weight]
         for weight in all_weights:
-            norms = torch.norm(weight, p=1, dim=-1)  # Compute L1 norms
+            norms = torch.norm(weight, p=2, dim=-1)  # Compute L2 norms
             top_k, indices = torch.topk(norms, prune_heads)  # Find top-k important weights
-            mask = torch.ones_like(norms)
-            mask[indices] = 0
+            mask = torch.zeros_like(norms)
+            mask[indices] = 1
             weight.data *= mask.unsqueeze(1)  # Apply pruning
-
 
 
 if __name__ == "__main__":
@@ -111,11 +110,12 @@ if __name__ == "__main__":
 
     # Model Initialization
     prune_heads = 20  # Number of columns/rows to retain in the attention layers
-    model = BERTPruned(prune_heads).to(device)
+    model = BERTL2Pruned(prune_heads).to(device)
 
     # Training Configuration
     loss_fn = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.000001)
+
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=10, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/bert-base'),
@@ -123,34 +123,42 @@ if __name__ == "__main__":
         profile_memory=True,
         with_stack=True
     ) as prof:
-        for i in range(2):
+        for epoch in range(2):
             model.train()
             for batch, dl in tqdm(enumerate(train_loader)):
-                if batch < 1 + 1 + 10:
-                    prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
-                ids=dl['ids']
-                token_type_ids=dl['token_type_ids']
-                mask= dl['mask']
-                label=dl['target']
-                label = label.unsqueeze(1)
+                ids = dl['ids']
+                token_type_ids = dl['token_type_ids']
+                mask = dl['mask']
+                label = dl['target'].unsqueeze(1)
 
                 optimizer.zero_grad()
-
-                output=model(
-                    ids=ids,
-                    mask=mask,
-                    token_type_ids=token_type_ids)
+                output = model(ids=ids, mask=mask, token_type_ids=token_type_ids)
                 label = label.type_as(output)
-
-                loss=loss_fn(output,label)
+                loss = loss_fn(output, label)
                 loss.backward()
-
                 optimizer.step()
+            
             model.eval()
             num_correct = 0
             num_samples = 0
             with torch.no_grad():
                 for batch, dl in enumerate(val_loader):
+                    ids = dl['ids']
+                    token_type_ids = dl['token_type_ids']
+                    mask = dl['mask']
+                    label = dl['target'].unsqueeze(1)
+
+                    output = model(ids=ids, mask=mask, token_type_ids=token_type_ids)
+                    label = label.type_as(output)
+                    pred = torch.where(output >= 0, 1, 0)
+                    num_correct += (pred == label).sum().item()
+                    num_samples += label.size(0)
+                accuracy = float(num_correct) / num_samples * 100
+                print(f'## Epoch {epoch + 1}: Accuracy {accuracy:.2f}%')
+                model.train()
+                for batch, dl in tqdm(enumerate(train_loader)):
+                    if batch < 1 + 1 + 10:
+                        prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
                     ids=dl['ids']
                     token_type_ids=dl['token_type_ids']
                     mask= dl['mask']
@@ -164,7 +172,30 @@ if __name__ == "__main__":
                         mask=mask,
                         token_type_ids=token_type_ids)
                     label = label.type_as(output)
-                    pred = torch.where(output >= 0, 1, 0)
-                    num_correct += sum(1 for a, b in zip(pred, label) if a[0] == b[0])
-                    num_samples += pred.shape[0]
-                print(f'##Epoch {i+1}: Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f}')
+
+                    loss=loss_fn(output,label)
+                    loss.backward()
+
+                    optimizer.step()
+                model.eval()
+                num_correct = 0
+                num_samples = 0
+                with torch.no_grad():
+                    for batch, dl in enumerate(val_loader):
+                        ids=dl['ids']
+                        token_type_ids=dl['token_type_ids']
+                        mask= dl['mask']
+                        label=dl['target']
+                        label = label.unsqueeze(1)
+
+                        optimizer.zero_grad()
+
+                        output=model(
+                            ids=ids,
+                            mask=mask,
+                            token_type_ids=token_type_ids)
+                        label = label.type_as(output)
+                        pred = torch.where(output >= 0, 1, 0)
+                        num_correct += sum(1 for a, b in zip(pred, label) if a[0] == b[0])
+                        num_samples += pred.shape[0]
+                    print(f'##Epoch {i+1}: Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f}')
