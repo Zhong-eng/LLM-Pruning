@@ -4,4 +4,4 @@ set -x
 module load anaconda3
 
 conda activate llm
-python layer_prune.py
+python test.py
