@@ -2,6 +2,7 @@
 # use the bash shell
 
 #SBATCH --time=5:00:00
+#SBATCH --job-name=L2_e1
 #SBATCH --mem=16GB
 #SBATCH --output=/jet/home/xli20/LLM-Pruning/L2_epoch1.log
 #SBATCH --mail-user=xinrul@andrew.cmu.edu
