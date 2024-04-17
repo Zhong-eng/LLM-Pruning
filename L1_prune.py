@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torchsummary import summary
 from tqdm import tqdm
 from datasets import load_dataset
-import torch.profiler
+from transformers import BertTokenizer
 
 
 class textDataset(Dataset):
@@ -24,6 +24,7 @@ class textDataset(Dataset):
       return len(self.label)
 
   def __getitem__(self, idx):
+
       text1 = self.texts[idx]
       inputs = self.tokenizer.encode_plus(
             text1 ,
@@ -57,34 +58,64 @@ class BERT(nn.Module):
         out= self.out(o2)
 
         return out
+    
+class BERTPruned(nn.Module):
+    def __init__(self, prune_heads):
+        super(BERTPruned, self).__init__()
+        self.bert_model = transformers.BertModel.from_pretrained("bert-base-uncased")
+        self.out = nn.Linear(768, 1)
+        self.prune_heads = prune_heads
+        self.apply_pruning()
+
+    def forward(self, ids, mask, token_type_ids):
+        _, pooled_output = self.bert_model(ids, attention_mask=mask, token_type_ids=token_type_ids, return_dict=False)
+        output = self.out(pooled_output)
+        return output
+
+    def apply_pruning(self):
+        with torch.no_grad():
+            for i, layer in enumerate(self.bert_model.encoder.layer):
+                self.prune_layer(layer, self.prune_heads)
+
+    def prune_layer(self, layer, prune_heads):
+        attention = layer.attention.self
+        all_weights = [attention.query.weight, attention.key.weight, attention.value.weight]
+        for weight in all_weights:
+            norms = torch.norm(weight, p=1, dim=-1)  # Compute L1 norms
+            top_k, indices = torch.topk(norms, prune_heads)  # Find top-k important weights
+            mask = torch.ones_like(norms)
+            mask[indices] = 0
+            weight.data *= mask.unsqueeze(1)  # Apply pruning
+
+
 
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device}")
+
+    # Data Preparation
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     dataset = load_dataset("stanfordnlp/sst2")
     data = dataset.with_format("torch")
 
     train_text = [each['sentence'] for each in data['train']]
     train_label = [each['label'] for each in data['train']]
-
     val_text = [each['sentence'] for each in data['validation']]
     val_label = [each['label'] for each in data['validation']]
 
+    # Dataset and DataLoader
+    trainset = textDataset(train_text, train_label, tokenizer, max_length=100)
+    train_loader = DataLoader(dataset=trainset, batch_size=32)
+    valset = textDataset(val_text, val_label, tokenizer, max_length=100)
+    val_loader = DataLoader(dataset=valset, batch_size=32)
 
-    tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
+    # Model Initialization
+    prune_heads = 20  # Number of columns/rows to retain in the attention layers
+    model = BERTPruned(prune_heads).to(device)
 
-    trainset= textDataset(train_text, train_label, tokenizer, max_length=100)
-    train_loader=DataLoader(dataset=trainset,batch_size=32)
-
-    valset= textDataset(val_text, val_label, tokenizer, max_length=100)
-    val_loader=DataLoader(dataset=valset,batch_size=32)
-
-    model=BERT().to(device)
-
+    # Training Configuration
     loss_fn = nn.BCEWithLogitsLoss()
-
-    #Initialize Optimizer
-    optimizer= optim.Adam(model.parameters(), lr= 0.000001)
+    optimizer = optim.Adam(model.parameters(), lr=0.000001)
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=10, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/bert-base'),
