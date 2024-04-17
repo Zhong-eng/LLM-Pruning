@@ -115,15 +115,15 @@ class BERTStructurallyPruned(nn.Module):
                 for name in ['query', 'key', 'value']:
                     layer = getattr(layer_orig.attention.self, name)
                     pruned_layer = getattr(layer_pruned.attention.self, name)
-                    pruned_layer.weight = nn.Parameter(layer.weight.data[:self.all_head_size, :self.all_head_size])
-                    print(pruned_layer.weight.shape)
+                    pruned_layer.weight = nn.Parameter(layer.weight.data[:self.all_head_size, :])
+                    print("pruned_layer:", pruned_layer.weight.shape)
                     pruned_layer.bias = nn.Parameter(layer.bias.data[:self.all_head_size])
 
                 # Adjust dense layer in the output of the attention block
                 out_layer_orig = layer_orig.attention.output.dense
                 out_layer_pruned = layer_pruned.attention.output.dense
                 out_layer_pruned.weight = nn.Parameter(out_layer_orig.weight.data[:, :self.all_head_size])
-                print(out_layer_pruned.weight.shape)
+                print("out_layer_pruned:", out_layer_pruned.weight.shape)
                 out_layer_pruned.bias = nn.Parameter(out_layer_orig.bias.data)
 
         return pruned_model
