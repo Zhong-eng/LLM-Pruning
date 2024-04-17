@@ -123,42 +123,35 @@ if __name__ == "__main__":
         profile_memory=True,
         with_stack=True
     ) as prof:
-        for epoch in range(1):
+        for i in range(50):
+        # for i in range(2):
             model.train()
             for batch, dl in tqdm(enumerate(train_loader)):
-                ids = dl['ids']
-                token_type_ids = dl['token_type_ids']
-                mask = dl['mask']
-                label = dl['target'].unsqueeze(1)
+                if batch < 1 + 1 + 10:
+                    prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
+                ids=dl['ids']
+                token_type_ids=dl['token_type_ids']
+                mask= dl['mask']
+                label=dl['target']
+                label = label.unsqueeze(1)
 
                 optimizer.zero_grad()
-                output = model(ids=ids, mask=mask, token_type_ids=token_type_ids)
+
+                output=model(
+                    ids=ids,
+                    mask=mask,
+                    token_type_ids=token_type_ids)
                 label = label.type_as(output)
-                loss = loss_fn(output, label)
+
+                loss=loss_fn(output,label)
                 loss.backward()
+
                 optimizer.step()
-            
             model.eval()
             num_correct = 0
             num_samples = 0
             with torch.no_grad():
                 for batch, dl in enumerate(val_loader):
-                    ids = dl['ids']
-                    token_type_ids = dl['token_type_ids']
-                    mask = dl['mask']
-                    label = dl['target'].unsqueeze(1)
-
-                    output = model(ids=ids, mask=mask, token_type_ids=token_type_ids)
-                    label = label.type_as(output)
-                    pred = torch.where(output >= 0, 1, 0)
-                    num_correct += (pred == label).sum().item()
-                    num_samples += label.size(0)
-                accuracy = float(num_correct) / num_samples * 100
-                print(f'## Epoch {epoch + 1}: Accuracy {accuracy:.2f}%')
-                model.train()
-                for batch, dl in tqdm(enumerate(train_loader)):
-                    if batch < 1 + 1 + 10:
-                        prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
                     ids=dl['ids']
                     token_type_ids=dl['token_type_ids']
                     mask= dl['mask']
@@ -172,30 +165,7 @@ if __name__ == "__main__":
                         mask=mask,
                         token_type_ids=token_type_ids)
                     label = label.type_as(output)
-
-                    loss=loss_fn(output,label)
-                    loss.backward()
-
-                    optimizer.step()
-                model.eval()
-                num_correct = 0
-                num_samples = 0
-                with torch.no_grad():
-                    for batch, dl in enumerate(val_loader):
-                        ids=dl['ids']
-                        token_type_ids=dl['token_type_ids']
-                        mask= dl['mask']
-                        label=dl['target']
-                        label = label.unsqueeze(1)
-
-                        optimizer.zero_grad()
-
-                        output=model(
-                            ids=ids,
-                            mask=mask,
-                            token_type_ids=token_type_ids)
-                        label = label.type_as(output)
-                        pred = torch.where(output >= 0, 1, 0)
-                        num_correct += sum(1 for a, b in zip(pred, label) if a[0] == b[0])
-                        num_samples += pred.shape[0]
-                    print(f'##Epoch {i+1}: Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f}')
+                    pred = torch.where(output >= 0, 1, 0)
+                    num_correct += sum(1 for a, b in zip(pred, label) if a[0] == b[0])
+                    num_samples += pred.shape[0]
+                print(f'##Epoch {i+1}: Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f}')
