@@ -118,13 +118,13 @@ if __name__ == "__main__":
     optimizer = optim.Adam(model.parameters(), lr=0.000001)
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=10, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/bert-base'),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/bert-base_L1_50'),
         record_shapes=True,
         profile_memory=True,
         with_stack=True
     ) as prof:
-        # for i in range(10):
-        for i in range(2):
+        for i in range(50):
+        # for i in range(2):
             model.train()
             for batch, dl in tqdm(enumerate(train_loader)):
                 if batch < 1 + 1 + 10:
