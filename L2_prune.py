@@ -94,7 +94,7 @@ class BERTStructurallyPruned(nn.Module):
         super(BERTStructurallyPruned, self).__init__()
         self.all_head_size = int(attention_head_size * num_attention_heads)
         self.bert_model = self.prune_bert_model(original_model, attention_head_size, num_attention_heads)
-        self.out = nn.Linear(self.all_head_size, 1)  
+        self.out = nn.Linear(768, 1)  
 
     def forward(self, ids, mask, token_type_ids):
         _, pooled_output = self.bert_model(ids, attention_mask=mask, token_type_ids=token_type_ids, return_dict=False)
