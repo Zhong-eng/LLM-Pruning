@@ -102,17 +102,22 @@ class BERTStructurallyPruned(nn.Module):
         return output
 
     def prune_bert_model(self, original_model, attention_head_size, num_attention_heads):
-        config = original_model.config
-        new_config = transformers.BertConfig.from_dict(config.to_dict())
-        new_config.num_attention_heads = num_attention_heads
-        new_config.hidden_size = self.all_head_size  # Adjust hidden size based on new heads
+        # config = original_model.config
+        # new_config = transformers.BertConfig.from_dict(config.to_dict())
+        # new_config.num_attention_heads = num_attention_heads
+        # new_config.hidden_size = self.all_head_size  # Adjust hidden size based on new heads
 
-        pruned_model = transformers.BertModel(new_config)
+        pruned_model = transformers.BertModel()
         
         with torch.no_grad():
             for layer_orig, layer_pruned in zip(original_model.encoder.layer, pruned_model.encoder.layer):
+                layer_pruned.attention.self.attention_head_size = attention_head_size
+                layer_pruned.attention.self.num_attention_heads = num_attention_heads
+                layer_pruned.attention.self.all_head_size = attention_head_size * num_attention_heads
+
                 # Adjust query, key, value weights and biases
                 for name in ['query', 'key', 'value']:
+
                     layer = getattr(layer_orig.attention.self, name)
                     pruned_layer = getattr(layer_pruned.attention.self, name)
                     pruned_layer.weight = nn.Parameter(layer.weight.data[:self.all_head_size, :])
