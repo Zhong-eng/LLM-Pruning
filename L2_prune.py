@@ -12,6 +12,8 @@ from tqdm import tqdm
 from datasets import load_dataset
 from transformers import BertTokenizer
 
+EPOCH = 50
+profiling_file_name = './log/bert-base_L2_epoch' + str(EPOCH)
 
 class textDataset(Dataset):
   def __init__(self, texts, label, tokenizer, max_length):
@@ -118,12 +120,12 @@ if __name__ == "__main__":
 
     with torch.profiler.profile(
         schedule=torch.profiler.schedule(wait=1, warmup=1, active=10, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/bert-base'),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(profiling_file_name),
         record_shapes=True,
         profile_memory=True,
         with_stack=True
     ) as prof:
-        for i in range(50):
+        for i in range(EPOCH):
         # for i in range(2):
             model.train()
             for batch, dl in tqdm(enumerate(train_loader)):
