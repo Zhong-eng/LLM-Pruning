@@ -123,8 +123,8 @@ if __name__ == "__main__":
         profile_memory=True,
         with_stack=True
     ) as prof:
-        for i in range(10):
-        # for i in range(2):
+        # for i in range(10):
+        for i in range(2):
             model.train()
             for batch, dl in tqdm(enumerate(train_loader)):
                 if batch < 1 + 1 + 10:
