@@ -83,7 +83,7 @@ class BERTL2Pruned(nn.Module):
         for weight in all_weights:
             norms = torch.norm(weight, p=2, dim=-1)  # Compute L2 norms
             top_k, indices = torch.topk(norms, prune_heads)  # Find top-k important weights
-            mask = torch.zeros_like(norms)
+            mask = torch.ones_like(norms)
             mask[indices] = 1
             weight.data *= mask.unsqueeze(1)  # Apply pruning
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         profile_memory=True,
         with_stack=True
     ) as prof:
-        for epoch in range(2):
+        for epoch in range(1):
             model.train()
             for batch, dl in tqdm(enumerate(train_loader)):
                 ids = dl['ids']
