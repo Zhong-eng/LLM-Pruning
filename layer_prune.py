@@ -60,7 +60,7 @@ class BERT(nn.Module):
         return out
 
 if __name__ == "__main__":
-    NUM_ATTENTION_KEPT = 4
+    NUM_ATTENTION_KEPT = 2
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device}")
@@ -137,7 +137,7 @@ if __name__ == "__main__":
             with torch.no_grad():
                 for i in range(NUM_ATTENTION_KEPT):
                     record[random_index[i]] = model.bert_model.encoder.layer[i]
-                model.bert_model.encoder.layer = record[::2]
+                model.bert_model.encoder.layer = record[::3]
 
                 for batch, dl in enumerate(val_loader):
                     ids=dl['ids']
