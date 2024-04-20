@@ -1,10 +1,10 @@
 #!/bin/bash
 # use the bash shell
 
-#SBATCH --time=5:00:00
-#SBATCH --job-name=L2_e1
+#SBATCH --time=10:00:00
+#SBATCH --job-name=L2_e50
 #SBATCH --mem=16GB
-#SBATCH --output=/jet/home/xli20/LLM-Pruning/L2_epoch1.log
+#SBATCH --output=/jet/home/xli20/LLM-Pruning/L2_epoch50_50_10.log
 #SBATCH --mail-user=xinrul@andrew.cmu.edu
 #SBATCH --mail-type=BEGIN,END,FAIL
 
