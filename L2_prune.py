@@ -13,7 +13,10 @@ from datasets import load_dataset
 from transformers import BertTokenizer
 
 EPOCH = 50
-profiling_file_name = './log/bert-base_L2_epoch' + str(EPOCH)
+# Number of columns/rows to retain in the attention layers
+attention_head_size=50
+num_attention_heads=10
+profiling_file_name = './log/bert-base_L2_epoch' + str(EPOCH) + "_attention_head_size" + str(attention_head_size) + "_num_attention_heads" + str(num_attention_heads)
 
 class textDataset(Dataset):
   def __init__(self, texts, label, tokenizer, max_length):
@@ -61,34 +64,7 @@ class BERT(nn.Module):
 
         return out
     
-# class BERTL2Pruned(nn.Module):
-#     def __init__(self, prune_heads):
-#         super(BERTL2Pruned, self).__init__()
-#         self.bert_model = transformers.BertModel.from_pretrained("bert-base-uncased")
-#         self.out = nn.Linear(768, 1)
-#         self.prune_heads = prune_heads
-#         self.apply_pruning()
-
-#     def forward(self, ids, mask, token_type_ids):
-#         _, pooled_output = self.bert_model(ids, attention_mask=mask, token_type_ids=token_type_ids, return_dict=False)
-#         output = self.out(pooled_output)
-#         return output
-
-#     def apply_pruning(self):
-#         with torch.no_grad():
-#             for i, layer in enumerate(self.bert_model.encoder.layer):
-#                 self.prune_layer(layer, self.prune_heads)
-
-#     def prune_layer(self, layer, prune_heads):
-#         attention = layer.attention.self
-#         all_weights = [attention.query.weight, attention.key.weight, attention.value.weight]
-#         for weight in all_weights:
-#             norms = torch.norm(weight, p=2, dim=-1)  # Compute L2 norms
-#             top_k, indices = torch.topk(norms, prune_heads)  # Find top-k important weights
-#             mask = torch.ones_like(norms)
-#             mask[indices] = 1
-#             weight.data *= mask.unsqueeze(1)  # Apply pruning
-
+# L2 pruning
 class BERTStructurallyPruned(nn.Module):
     def __init__(self, original_model, attention_head_size, num_attention_heads):
         super(BERTStructurallyPruned, self).__init__()
@@ -107,7 +83,7 @@ class BERTStructurallyPruned(nn.Module):
         # new_config.num_attention_heads = num_attention_heads
         # new_config.hidden_size = self.all_head_size  # Adjust hidden size based on new heads
 
-        pruned_model = transformers.BertModel()
+        pruned_model = transformers.BertModel(original_model.config)
         
         with torch.no_grad():
             for layer_orig, layer_pruned in zip(original_model.encoder.layer, pruned_model.encoder.layer):
@@ -120,9 +96,13 @@ class BERTStructurallyPruned(nn.Module):
 
                     layer = getattr(layer_orig.attention.self, name)
                     pruned_layer = getattr(layer_pruned.attention.self, name)
-                    pruned_layer.weight = nn.Parameter(layer.weight.data[:self.all_head_size, :])
+
+                    # Select top-k weights based on the norm of the rows
+                    indices = self.select_top_weights(layer.weight.data, self.all_head_size)
+
+                    pruned_layer.weight = nn.Parameter(layer.weight.data[indices, :])
                     print("pruned_layer:", pruned_layer.weight.shape)
-                    pruned_layer.bias = nn.Parameter(layer.bias.data[:self.all_head_size])
+                    pruned_layer.bias = nn.Parameter(layer.bias.data[indices])
 
                 # Adjust dense layer in the output of the attention block
                 out_layer_orig = layer_orig.attention.output.dense
@@ -161,10 +141,11 @@ if __name__ == "__main__":
     val_loader = DataLoader(dataset=valset, batch_size=32)
 
     # Model Initialization
-    prune_heads = 20  # Number of columns/rows to retain in the attention layers
+    # Number of columns/rows to retain in the attention layers
+    # prune_heads = "global variable"  
     # model = BERTL2Pruned(prune_heads).to(device)
     original_model = transformers.BertModel.from_pretrained("bert-base-uncased")
-    model = BERTStructurallyPruned(original_model, attention_head_size=10, num_attention_heads=2).to(device)
+    model = BERTStructurallyPruned(original_model, attention_head_size, num_attention_heads).to(device)
 
     # Training Configuration
     loss_fn = nn.BCEWithLogitsLoss()
@@ -224,54 +205,5 @@ if __name__ == "__main__":
                     num_samples += pred.shape[0]
                 print(f'##Epoch {i+1}: Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f}')
 
-
-
-
-
-
-# import torch
-# import torch.nn as nn
-# from transformers import BertModel, BertConfig
-
-# class BERTStructurallyPruned(nn.Module):
-#     def __init__(self, original_model, attention_head_size, num_attention_heads):
-#         super(BERTStructurallyPruned, self).__init__()
-#         self.all_head_size = int(attention_head_size * num_attention_heads)
-#         self.bert_model = self.prune_bert_model(original_model, attention_head_size, num_attention_heads)
-#         self.out = nn.Linear(self.all_head_size, 1)  
-
-#     def forward(self, ids, mask, token_type_ids):
-#         _, pooled_output = self.bert_model(ids, attention_mask=mask, token_type_ids=token_type_ids, return_dict=False)
-#         output = self.out(pooled_output)
-#         return output
-
-#     def prune_bert_model(self, original_model, attention_head_size, num_attention_heads):
-#         config = original_model.config
-#         new_config = BertConfig.from_dict(config.to_dict())
-#         new_config.num_attention_heads = num_attention_heads
-#         new_config.hidden_size = self.all_head_size  # Adjust hidden size based on new heads
-
-#         pruned_model = BertModel(new_config)
-        
-#         with torch.no_grad():
-#             for layer_orig, layer_pruned in zip(original_model.encoder.layer, pruned_model.encoder.layer):
-#                 # Adjust query, key, value weights and biases
-#                 for name in ['query', 'key', 'value']:
-#                     layer = getattr(layer_orig.attention.self, name)
-#                     pruned_layer = getattr(layer_pruned.attention.self, name)
-#                     pruned_layer.weight = nn.Parameter(layer.weight.data[:self.all_head_size, :self.all_head_size])
-#                     pruned_layer.bias = nn.Parameter(layer.bias.data[:self.all_head_size])
-
-#                 # Adjust dense layer in the output of the attention block
-#                 out_layer_orig = layer_orig.attention.output.dense
-#                 out_layer_pruned = layer_pruned.attention.output.dense
-#                 out_layer_pruned.weight = nn.Parameter(out_layer_orig.weight.data[:, :self.all_head_size])
-#                 out_layer_pruned.bias = nn.Parameter(out_layer_orig.bias.data)
-
-#         return pruned_model
-
-#     def select_top_weights(self, weights, k):
-#         # Assuming selecting top-k weights by some norm or criteria
-#         norms = torch.norm(weights, dim=1)
-#         _, indices = torch.topk(norms, k)
-#         return indices
+                if i == EPOCH - 1:
+                    torch.save(model.state_dict(), './model/L2_e50_head50.pth')
