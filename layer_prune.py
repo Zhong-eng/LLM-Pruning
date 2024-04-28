@@ -137,7 +137,11 @@ if __name__ == "__main__":
             with torch.no_grad():
                 for i in range(NUM_ATTENTION_KEPT):
                     record[random_index[i]] = model.bert_model.encoder.layer[i]
-                model.bert_model.encoder.layer = record[::3]
+                # inference_layer = nn.ModuleList()
+                # for i in range(12):
+                #     if (i + 1) % 3 != 0:
+                #         inference_layer.append(record[i])
+                model.bert_model.encoder.layer = record[::6]
 
                 for batch, dl in enumerate(val_loader):
                     ids=dl['ids']
@@ -159,10 +163,40 @@ if __name__ == "__main__":
                 acc = num_correct / num_samples
                 print(f'##Epoch {j+1}: Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f}')
             if acc > best_acc:
-                    best_acc = acc
-                    torch.save(model.state_dict(), './checkpoint/layer_prune.pt')
-                    print("Best checkpoint saved!")
+                best_acc = acc
+                torch.save(model.state_dict(), './checkpoint/layer_prune-2-2.pt')
+                print("Best checkpoint saved!")
             model.bert_model.encoder.layer = record
+    model.eval()
+    num_correct = 0
+    num_samples = 0
+    model.bert_model.encoder.layer =  model.bert_model.encoder.layer[::6]
+    with torch.no_grad():
+        start_time = time.time()
+
+        for batch, dl in enumerate(train_loader):
+            ids=dl['ids']
+            token_type_ids=dl['token_type_ids']
+            mask= dl['mask']
+            label=dl['target']
+            label = label.unsqueeze(1)
+            output=model(
+                ids=ids,
+                mask=mask,
+                token_type_ids=token_type_ids)
+            label = label.type_as(output)
+            pred = torch.where(output >= 0, 1, 0)
+            num_correct += sum(1 for a, b in zip(pred, label) if a[0] == b[0])
+            num_samples += pred.shape[0]
+        end_time = time.time()
+
+        acc = num_correct / num_samples
+            
+
+        print(f'Got {num_correct} / {num_samples} with accuracy {float(num_correct)/float(num_samples)*100:.2f} in {end_time - start_time}s')
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Number of parameters: {total_params}")
+
 
 
 
